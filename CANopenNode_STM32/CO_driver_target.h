@@ -136,30 +136,91 @@ typedef struct {
     void* addrNV;
 } CO_storage_entry_t;
 
+#ifndef portFORCE_INLINE
+	#define portFORCE_INLINE inline __attribute__(( always_inline))
+#endif
+
+#ifdef __NVIC_PRIO_BITS
+	/* __BVIC_PRIO_BITS will be specified when CMSIS is being used. */
+	#define configPRIO_BITS       		__NVIC_PRIO_BITS
+#else
+	#define configPRIO_BITS       		4        /* 15 priority levels */
+#endif
+/* THE CANBUS AND TIMER INTERRUPT MUST HAS A LOWER PRIORITY THAN THIS!
+(lower priorities are higher numeric values.) */
+#define configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY	13
+
+#define configMAX_SYSCALL_INTERRUPT_PRIORITY 	( configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY << (8 - configPRIO_BITS) )
+
+#define portSET_INTERRUPT_MASK_FROM_ISR()		ulPortRaiseBASEPRI()
+#define portCLEAR_INTERRUPT_MASK_FROM_ISR(x)	vPortSetBASEPRI(x)
+
+/*-----------------------------------------------------------*/
+
+portFORCE_INLINE static uint32_t ulPortRaiseBASEPRI( void )
+{
+uint32_t ulOriginalBASEPRI, ulNewBASEPRI;
+
+	__asm volatile
+	(
+		"	mrs %0, basepri											\n" \
+		"	mov %1, %2												\n"	\
+		"	msr basepri, %1											\n" \
+		"	isb														\n" \
+		"	dsb														\n" \
+		:"=r" (ulOriginalBASEPRI), "=r" (ulNewBASEPRI) : "i" ( configMAX_SYSCALL_INTERRUPT_PRIORITY )
+	);
+
+	/* This return will not be reached but is necessary to prevent compiler
+	warnings. */
+	return ulOriginalBASEPRI;
+}
+/*-----------------------------------------------------------*/
+
+portFORCE_INLINE static void vPortSetBASEPRI( uint32_t ulNewMaskValue )
+{
+	__asm volatile
+	(
+		"	msr basepri, %0	" :: "r" ( ulNewMaskValue )
+	);
+}
+
+
 /* (un)lock critical section in CO_CANsend() */
 // Why disabling the whole Interrupt
 #define CO_LOCK_CAN_SEND(CAN_MODULE)                                                                                   \
-    do {                                                                                                               \
-        (CAN_MODULE)->primask_send = __get_PRIMASK();                                                                  \
-        __disable_irq();                                                                                               \
+	do {                                                                                                               \
+	    CAN_MODULE->primask_send = portSET_INTERRUPT_MASK_FROM_ISR();                                                  \
     } while (0)
-#define CO_UNLOCK_CAN_SEND(CAN_MODULE) __set_PRIMASK((CAN_MODULE)->primask_send)
+
+#define CO_UNLOCK_CAN_SEND(CAN_MODULE)                                                                                 \
+    do {                                                                                                               \
+        portCLEAR_INTERRUPT_MASK_FROM_ISR(CAN_MODULE->primask_send);                                                   \
+    } while (0)
 
 /* (un)lock critical section in CO_errorReport() or CO_errorReset() */
 #define CO_LOCK_EMCY(CAN_MODULE)                                                                                       \
     do {                                                                                                               \
-        (CAN_MODULE)->primask_emcy = __get_PRIMASK();                                                                  \
-        __disable_irq();                                                                                               \
+        CAN_MODULE->primask_emcy = portSET_INTERRUPT_MASK_FROM_ISR();                                                  \
     } while (0)
-#define CO_UNLOCK_EMCY(CAN_MODULE) __set_PRIMASK((CAN_MODULE)->primask_emcy)
+
+#define CO_UNLOCK_EMCY(CAN_MODULE)                                                                                     \
+    do {                                                                                                               \
+        portCLEAR_INTERRUPT_MASK_FROM_ISR(CAN_MODULE->primask_emcy);                                                   \
+    } while (0)
+
 
 /* (un)lock critical section when accessing Object Dictionary */
 #define CO_LOCK_OD(CAN_MODULE)                                                                                         \
     do {                                                                                                               \
-        (CAN_MODULE)->primask_od = __get_PRIMASK();                                                                    \
-        __disable_irq();                                                                                               \
+        CAN_MODULE->primask_od = portSET_INTERRUPT_MASK_FROM_ISR();                                                    \
     } while (0)
-#define CO_UNLOCK_OD(CAN_MODULE) __set_PRIMASK((CAN_MODULE)->primask_od)
+
+#define CO_UNLOCK_OD(CAN_MODULE)                                                                                       \
+    do {                                                                                                               \
+        portCLEAR_INTERRUPT_MASK_FROM_ISR(CAN_MODULE->primask_od);                                                     \
+    } while (0)
+
 
 /* Synchronization between CAN receive and message processing threads. */
 #define CO_MemoryBarrier()

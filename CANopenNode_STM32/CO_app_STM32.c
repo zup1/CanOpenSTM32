@@ -171,9 +171,13 @@ canopen_app_resetCommunication() {
         }
         return 4;
     }
-
+#if defined HAL_TIM_MODULE_ENABLED
     /* Configure Timer interrupt function for execution every 1 millisecond */
     HAL_TIM_Base_Start_IT(canopenNodeSTM32->timerHandle); //1ms interrupt
+#else
+    LL_TIM_EnableIT_UPDATE(canopenNodeSTM32->timer);
+    LL_TIM_EnableCounter(canopenNodeSTM32->timer);
+#endif
 
     /* Configure CAN transmit and receive interrupt */
 

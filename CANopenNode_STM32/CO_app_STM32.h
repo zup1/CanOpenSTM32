@@ -32,10 +32,14 @@ typedef struct {
 	 */
     uint8_t activeNodeID; /* Assigned Node ID */
     uint8_t baudrate;     /* This is the baudrate you've set in your CubeMX Configuration */
+#if defined HAL_TIM_MODULE_ENABLED
     TIM_HandleTypeDef*
         timerHandle; /*Pass in the timer that is going to be used for generating 1ms interrupt for tmrThread function,
 	 * please note that CANOpenSTM32 Library will override HAL_TIM_PeriodElapsedCallback function, if you also need this function in your codes, please take required steps
 	 */
+#else
+    TIM_TypeDef *timer;
+#endif
 
     /* Pass in the CAN Handle to this function and it wil be used for all CAN Communications. It can be FDCan or CAN
 	 * and CANOpenSTM32 Driver will take of care of handling that*/
